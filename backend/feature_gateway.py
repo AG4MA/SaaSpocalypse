@@ -138,7 +138,8 @@ def build_metadata(feature_id: str, user_prompt: str, name: str,
 
 
 def deploy_feature(slug: str, manifest: dict, component_code: str,
-                   metadata: dict, test_results: dict = None):
+                   metadata: dict, test_results: dict = None,
+                   generation_log: list = None):
     """Deploy a validated feature from sandbox to features/ directory."""
     ensure_dirs()
     feature_dir = FEATURES_DIR / slug
@@ -163,3 +164,65 @@ def deploy_feature(slug: str, manifest: dict, component_code: str,
         tests_dir.mkdir(exist_ok=True)
         with open(tests_dir / "results.json", "w", encoding="utf-8") as f:
             json.dump(test_results, f, indent=2, ensure_ascii=False)
+
+    # Write generation log for debugging
+    if generation_log:
+        with open(feature_dir / "generation.log", "w", encoding="utf-8") as f:
+            f.write("\n".join(generation_log))
+
+
+def save_failed_generation(slug: str, user_prompt: str, attempts: list):
+    """Save logs for a failed feature generation attempt for debugging."""
+    from datetime import datetime
+    ensure_dirs()
+    
+    failed_dir = FEATURES_DIR / "_failed"
+    failed_dir.mkdir(exist_ok=True)
+    
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = failed_dir / f"{slug}_{timestamp}.log"
+    
+    log_content = [
+        f"=== Failed Feature Generation ===",
+        f"Slug: {slug}",
+        f"Prompt: {user_prompt}",
+        f"Time: {datetime.now().isoformat()}",
+        f"Total Attempts: {len(attempts)}",
+        "",
+    ]
+    
+    for i, attempt in enumerate(attempts, 1):
+        log_content.append(f"--- Attempt {i} ---")
+        log_content.append(f"Code length: {len(attempt.get('code', ''))} chars")
+        log_content.append(f"Test Results: {json.dumps(attempt.get('test_results', {}), indent=2)}")
+        log_content.append(f"")
+        log_content.append(f"Generated Code:")
+        log_content.append(f"```")
+        log_content.append(attempt.get('code', 'N/A'))
+        log_content.append(f"```")
+        log_content.append("")
+    
+    with open(log_file, "w", encoding="utf-8") as f:
+        f.write("\n".join(log_content))
+    
+    print(f"[GATEWAY] Saved failed generation log to {log_file}")
+    return str(log_file)
+
+
+def delete_feature(slug: str) -> bool:
+    """Delete a feature from the features/ directory.
+    
+    Returns True if deleted successfully, False if feature not found.
+    """
+    import shutil
+    
+    feature_dir = FEATURES_DIR / slug
+    if not feature_dir.exists() or not feature_dir.is_dir():
+        return False
+    
+    try:
+        shutil.rmtree(feature_dir)
+        return True
+    except Exception as e:
+        print(f"[GATEWAY] Failed to delete feature '{slug}': {e}")
+        return False

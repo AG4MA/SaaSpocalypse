@@ -22,7 +22,7 @@ from ai_pipeline.code_generator import generate_code, fix_code
 from ai_pipeline.sandbox import run_sandbox_tests
 from feature_gateway import (
     get_all_manifests, build_manifest, build_metadata,
-    deploy_feature, slugify,
+    deploy_feature, slugify, save_failed_generation,
 )
 from database import update_feature, get_features_count
 
@@ -72,16 +72,24 @@ async def run_pipeline(feature_id: str, user_prompt: str, created_at: str, ws: W
         manifest = build_manifest(name, icon, description, user_prompt, sidebar_order)
 
         # ─── Step 4: Testing + Auto-fix loop ────────────────────
-        attempts = 0
+        attempt_count = 0
         last_test_results = None
+        attempt_history = []  # Track all attempts for logging
 
-        while attempts < MAX_ATTEMPTS:
-            attempts += 1
-            await send_step(ws, "testing", {"attempt": attempts})
-            print(f"[Pipeline] Running sandbox tests (attempt {attempts}/{MAX_ATTEMPTS})...")
+        while attempt_count < MAX_ATTEMPTS:
+            attempt_count += 1
+            await send_step(ws, "testing", {"attempt": attempt_count})
+            print(f"[Pipeline] Running sandbox tests (attempt {attempt_count}/{MAX_ATTEMPTS})...")
 
             test_results = await run_sandbox_tests(code, manifest)
             last_test_results = test_results
+            
+            # Track this attempt
+            attempt_history.append({
+                "attempt": attempt_count,
+                "code": code,
+                "test_results": test_results,
+            })
 
             ut_passed = len(test_results.get("unitTests", {}).get("passed", []))
             ut_failed = len(test_results.get("unitTests", {}).get("failed", []))
@@ -98,15 +106,17 @@ async def run_pipeline(feature_id: str, user_prompt: str, created_at: str, ws: W
             print(f"[Pipeline] Tests failed: {test_results.get('summary', '')}")
 
             # Auto-fix
-            if attempts < MAX_ATTEMPTS:
-                await send_step(ws, "fixing", {"attempt": attempts})
+            if attempt_count < MAX_ATTEMPTS:
+                await send_step(ws, "fixing", {"attempt": attempt_count})
                 print(f"[Pipeline] Asking Claude to fix...")
                 code = await fix_code(code, test_results, user_prompt)
             else:
-                # Max attempts reached — fail
+                # Max attempts reached — save logs and fail
+                save_failed_generation(slug, user_prompt, attempt_history)
+                
                 await update_feature(feature_id, {
                     "status": "failed",
-                    "attempts": attempts,
+                    "attempts": attempt_count,
                 })
                 await ws.send_json({
                     "type": "error",
@@ -121,10 +131,19 @@ async def run_pipeline(feature_id: str, user_prompt: str, created_at: str, ws: W
         print(f"[Pipeline] Deploying '{name}' to features/{slug}/")
 
         # Build metadata
-        metadata = build_metadata(feature_id, user_prompt, name, created_at, attempts)
+        metadata = build_metadata(feature_id, user_prompt, name, created_at, attempt_count)
+        
+        # Build generation log for debugging
+        generation_log = [
+            f"Feature: {name}",
+            f"Slug: {slug}",
+            f"User Prompt: {user_prompt}",
+            f"Total Attempts: {attempt_count}",
+            f"Final Code Length: {len(code)} chars",
+        ]
 
         # Deploy to features/ directory (real files on disk)
-        deploy_feature(slug, manifest, code, metadata, last_test_results)
+        deploy_feature(slug, manifest, code, metadata, last_test_results, generation_log)
 
         # Update DB generation job as complete
         await update_feature(feature_id, {
@@ -132,7 +151,7 @@ async def run_pipeline(feature_id: str, user_prompt: str, created_at: str, ws: W
             "icon": icon,
             "description": description,
             "status": "ready",
-            "attempts": attempts,
+            "attempts": attempt_count,
             "slug": slug,
         })
 
@@ -141,6 +160,7 @@ async def run_pipeline(feature_id: str, user_prompt: str, created_at: str, ws: W
         print(f"[Pipeline]   - manifest.json")
         print(f"[Pipeline]   - metadata.json")
         print(f"[Pipeline]   - tests/results.json")
+        print(f"[Pipeline]   - generation.log")
 
         # Send complete message with manifest data (not code)
         feature_data = {

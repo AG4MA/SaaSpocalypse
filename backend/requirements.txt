@@ -1,6 +1,9 @@
 fastapi
 uvicorn[standard]
 anthropic
+openai
+google-generativeai
 pydantic
 aiosqlite
 python-dotenv
+cryptography

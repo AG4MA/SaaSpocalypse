@@ -1,0 +1,16 @@
+{
+  "name": "Surprise Box",
+  "slug": "surprise-box",
+  "icon": "🎁",
+  "description": "A box that reveals a happy birthday message when clicked",
+  "version": "1.0.0",
+  "route": "/feature/surprise-box",
+  "sidebarEntry": {
+    "label": "Surprise Box",
+    "icon": "🎁",
+    "order": 10
+  },
+  "component": "component.jsx",
+  "apiEndpoints": [],
+  "dataAccess": []
+}

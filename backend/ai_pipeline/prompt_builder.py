@@ -29,23 +29,26 @@ Each feature is a real module with:
 The feature will be accessible at its own route in the sidebar.
 It must work as a standalone page within the CRM layout.
 
+## CRITICAL Runtime Environment
+Your code runs inside a sandbox where these variables are ALREADY AVAILABLE as parameters:
+- `React` - The React object (DO NOT import it, DO NOT declare it, it's already there)
+- `require` - For importing allowed modules (only 'recharts')
+- `exports` - For exporting your component
+- `Card`, `Badge`, `Button`, `Input`, `Modal`, `Table` - UI components (already available)
+
 ## Technical Constraints
-- You MUST export a default function component via `exports.default = ComponentName;`
-- You can use React hooks: useState, useEffect, useMemo, useCallback, useRef
-- You can use `require('recharts')` for charts
-- UI components available via UIComponents parameter: Card, Badge, Button, Input, Modal, Table
-- Use ONLY inline styles or Tailwind CSS classes for styling
-- Tailwind classes available match the design system above (bg-[#1a1a2e], text-[#94a3b8], etc.)
+- You MUST export via `exports.default = ComponentName;` at the very end
+- NEVER declare React: NO `const React = ...`, NO `import React`, NO `var React = ...`
+- To use hooks, destructure from React: `const { useState, useEffect } = React;`
+- To use recharts: `const { BarChart, Bar, XAxis, YAxis } = require('recharts');`
+- Use React.createElement() instead of JSX (code is not transpiled)
+- UI components (Card, Badge, Button, Input, Modal, Table) are global - use directly
+- Use Tailwind CSS classes with the design system colors
 - Generate realistic mock data inside the component
-- Do NOT use fetch, axios, or any external API calls
-- Do NOT use localStorage, sessionStorage, or cookies
-- Do NOT use eval, Function constructor, or dynamic imports
-- Do NOT access document or window directly
-- Do NOT import any modules other than those listed above
-- The component must be fully self-contained
+- FORBIDDEN: fetch, axios, localStorage, sessionStorage, eval, dynamic import, document, window
 
 ## Output Format
-You must respond with a JSON object containing exactly these fields:
+Respond with a JSON object:
 ```json
 {
   "name": "Short feature name (2-4 words)",
@@ -55,10 +58,7 @@ You must respond with a JSON object containing exactly these fields:
 }
 ```
 
-The code field should contain ONLY the component code, starting with any const/function declarations and ending with the export.
-The code should use `exports.default = ComponentName;` at the end (not ES6 export syntax).
-
-## Example Code Structure
+## CORRECT Example
 ```javascript
 const { useState, useMemo } = React;
 const { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } = require('recharts');
@@ -82,8 +82,17 @@ function MyFeature() {
 exports.default = MyFeature;
 ```
 
-IMPORTANT: Use React.createElement() instead of JSX syntax, since the code will not be transpiled.
-IMPORTANT: Always use exports.default = ComponentName at the end.
+## WRONG (will fail)
+```javascript
+// WRONG: Don't declare React!
+const React = require('react');  // <-- NEVER DO THIS
+import React from 'react';       // <-- NEVER DO THIS
+
+// WRONG: Don't use ES6 exports
+export default MyFeature;        // <-- NEVER DO THIS
+```
+
+Remember: React is already provided. Just use it directly.
 """
 
 

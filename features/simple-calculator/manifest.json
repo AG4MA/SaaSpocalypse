@@ -1,0 +1,16 @@
+{
+  "name": "Simple Calculator",
+  "slug": "simple-calculator",
+  "icon": "🧮",
+  "description": "A basic calculator for simple math operations",
+  "version": "1.0.0",
+  "route": "/feature/simple-calculator",
+  "sidebarEntry": {
+    "label": "Simple Calculator",
+    "icon": "🧮",
+    "order": 4
+  },
+  "component": "component.jsx",
+  "apiEndpoints": [],
+  "dataAccess": []
+}

@@ -11,7 +11,9 @@ from ai_pipeline.orchestrator import run_pipeline
 from ai_pipeline.ux_agent import evaluate_ux
 from feature_gateway import (
     get_all_manifests, get_manifest, get_component_code, get_metadata, ensure_dirs,
+    delete_feature,
 )
+from api_key_manager import set_api_key, has_api_key, clear_api_key, get_provider, get_model, SUPPORTED_PROVIDERS, AVAILABLE_MODELS
 
 
 @asynccontextmanager
@@ -83,6 +85,16 @@ async def get_feature_metadata(slug: str):
     return meta
 
 
+@app.delete("/api/features/{slug}")
+async def remove_feature(slug: str):
+    """Delete a feature from the system."""
+    success = delete_feature(slug)
+    if not success:
+        raise HTTPException(status_code=404, detail=f"Feature '{slug}' not found")
+    print(f"[API] Deleted feature: {slug}")
+    return {"status": "deleted", "slug": slug}
+
+
 # ─── Feature Generation API ───────────────────────────────────
 
 
@@ -136,6 +148,97 @@ async def ux_evaluation():
         })
     result = await evaluate_ux(features_for_eval)
     return result
+
+
+# ─── API Key Configuration ─────────────────────────────────────
+
+
+class SetApiKeyRequest(BaseModel):
+    api_key: str
+    provider: str = "anthropic"  # anthropic, openai, google
+    model: str = None  # Model ID, uses default if not specified
+
+
+@app.get("/api/config/providers")
+async def get_providers():
+    """Get list of supported LLM providers and their available models."""
+    return {
+        "providers": [
+            {
+                "id": "anthropic",
+                "name": "Anthropic",
+                "keyPrefix": "sk-ant-",
+                "models": AVAILABLE_MODELS["anthropic"],
+            },
+            {
+                "id": "openai",
+                "name": "OpenAI",
+                "keyPrefix": "sk-",
+                "models": AVAILABLE_MODELS["openai"],
+            },
+            {
+                "id": "google",
+                "name": "Google",
+                "keyPrefix": "AI",
+                "models": AVAILABLE_MODELS["google"],
+            },
+        ]
+    }
+
+
+@app.post("/api/config/api-key")
+async def configure_api_key(req: SetApiKeyRequest):
+    """Set the API key for the current session.
+    
+    The key is encrypted in memory and never persisted to disk.
+    It will be automatically cleared when the server stops.
+    """
+    if not req.api_key or not req.api_key.strip():
+        raise HTTPException(status_code=400, detail="API key cannot be empty")
+    
+    if req.provider not in SUPPORTED_PROVIDERS:
+        raise HTTPException(status_code=400, detail=f"Invalid provider. Supported: {', '.join(SUPPORTED_PROVIDERS)}")
+    
+    # Basic format validation per provider
+    key = req.api_key.strip()
+    if req.provider == "anthropic" and not key.startswith("sk-ant-"):
+        raise HTTPException(status_code=400, detail="Anthropic API keys should start with 'sk-ant-'")
+    if req.provider == "openai" and not key.startswith("sk-"):
+        raise HTTPException(status_code=400, detail="OpenAI API keys should start with 'sk-'")
+    if req.provider == "google" and not key.startswith("AI"):
+        raise HTTPException(status_code=400, detail="Google API keys should start with 'AI'")
+    
+    # Validate model if specified
+    model_id = req.model
+    if model_id:
+        valid_models = [m["id"] for m in AVAILABLE_MODELS.get(req.provider, [])]
+        if model_id not in valid_models:
+            raise HTTPException(status_code=400, detail=f"Invalid model for {req.provider}. Available: {', '.join(valid_models)}")
+    
+    success = set_api_key(req.api_key, req.provider, model_id)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to store API key")
+    
+    print(f"[CONFIG] API key configured for provider: {req.provider}, model: {get_model()}")
+    return {"status": "configured", "provider": req.provider, "model": get_model(), "message": f"API key configured for {req.provider}"}
+
+
+@app.get("/api/config/api-key/status")
+async def get_api_key_status():
+    """Check if an API key has been configured for this session.
+    
+    Never returns the actual key, only whether one is set and which provider/model.
+    """
+    return {"configured": has_api_key(), "provider": get_provider(), "model": get_model()}
+
+
+
+@app.delete("/api/config/api-key")
+async def remove_api_key():
+    """Clear the API key from memory."""
+    clear_api_key()
+    print("[CONFIG] API key cleared from session")
+    return {"status": "cleared", "message": "API key has been removed from this session"}
 
 
 # ─── WebSocket ─────────────────────────────────────────────────
