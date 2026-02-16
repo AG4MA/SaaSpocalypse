@@ -35,17 +35,23 @@ export interface Activity {
   contactName?: string
 }
 
-export interface Feature {
-  id: string
+/**
+ * An installed feature — derived from manifest.json on the filesystem.
+ * This is the source of truth for what features are available.
+ * Code is NOT stored here — it's loaded on demand from the gateway API.
+ */
+export interface InstalledFeature {
+  slug: string
   name: string
   icon: string
   description: string
-  userPrompt: string
-  code: string
-  status: 'generating' | 'testing' | 'fixing' | 'ready' | 'failed'
-  attempts: number
-  createdAt: string
-  sidebarOrder: number
+  route: string
+  sidebarEntry: {
+    label: string
+    icon: string
+    order: number
+  }
+  version?: string
 }
 
 export type FeatureGenerationStep =

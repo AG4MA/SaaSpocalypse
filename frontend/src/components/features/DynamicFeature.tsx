@@ -1,19 +1,20 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { useFeatureStore } from '../../store/featureStore'
+import { fetchFeatureCode } from '../../services/api'
 import { loadFeatureComponent } from '../../services/featureLoader'
 import { AlertTriangle, Loader2 } from 'lucide-react'
 import { Card } from '../ui/Card'
 
 export function DynamicFeature() {
-  const { featureId } = useParams<{ featureId: string }>()
-  const feature = useFeatureStore((s) => s.features.find((f) => f.id === featureId))
+  const { featureSlug } = useParams<{ featureSlug: string }>()
+  const feature = useFeatureStore((s) => s.features.find((f) => f.slug === featureSlug))
   const [Component, setComponent] = useState<React.ComponentType | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!feature?.code) {
+    if (!featureSlug) {
       setLoading(false)
       return
     }
@@ -21,7 +22,9 @@ export function DynamicFeature() {
     setLoading(true)
     setError(null)
 
-    loadFeatureComponent(feature.code)
+    // Fetch code from the gateway API (code lives on disk, not in store)
+    fetchFeatureCode(featureSlug)
+      .then((code) => loadFeatureComponent(code))
       .then((Comp) => {
         setComponent(() => Comp)
         setLoading(false)
@@ -30,9 +33,9 @@ export function DynamicFeature() {
         setError(err.message || 'Failed to load feature')
         setLoading(false)
       })
-  }, [feature?.code])
+  }, [featureSlug])
 
-  if (!feature) {
+  if (!feature && !loading) {
     return (
       <div className="flex items-center justify-center h-64">
         <p className="text-text-secondary">Feature not found</p>
@@ -67,8 +70,8 @@ export function DynamicFeature() {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
-        <span className="text-2xl">{feature.icon}</span>
-        <h1 className="text-2xl font-bold">{feature.name}</h1>
+        <span className="text-2xl">{feature?.icon}</span>
+        <h1 className="text-2xl font-bold">{feature?.name}</h1>
       </div>
       <Component />
     </div>

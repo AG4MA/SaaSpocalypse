@@ -1,20 +1,19 @@
 import { create } from 'zustand'
-import type { Feature, FeatureGenerationStep } from '../types'
+import type { InstalledFeature, FeatureGenerationStep } from '../types'
 
 interface FeatureState {
-  features: Feature[]
+  features: InstalledFeature[]
   isBuilderOpen: boolean
   currentGenerationId: string | null
   currentStep: FeatureGenerationStep | null
-  highlightedFeatureId: string | null
+  highlightedFeatureSlug: string | null
 
   openBuilder: () => void
   closeBuilder: () => void
   setGenerationStep: (id: string, step: FeatureGenerationStep) => void
-  addFeature: (feature: Feature) => void
-  updateFeature: (id: string, updates: Partial<Feature>) => void
-  setHighlightedFeature: (id: string | null) => void
-  loadFeatures: (features: Feature[]) => void
+  addFeature: (feature: InstalledFeature) => void
+  setHighlightedFeature: (slug: string | null) => void
+  loadFeatures: (features: InstalledFeature[]) => void
 }
 
 export const useFeatureStore = create<FeatureState>((set) => ({
@@ -22,7 +21,7 @@ export const useFeatureStore = create<FeatureState>((set) => ({
   isBuilderOpen: false,
   currentGenerationId: null,
   currentStep: null,
-  highlightedFeatureId: null,
+  highlightedFeatureSlug: null,
 
   openBuilder: () => set({ isBuilderOpen: true }),
   closeBuilder: () => set({ isBuilderOpen: false, currentGenerationId: null, currentStep: null }),
@@ -32,15 +31,10 @@ export const useFeatureStore = create<FeatureState>((set) => ({
   addFeature: (feature) =>
     set((state) => ({ features: [...state.features, feature] })),
 
-  updateFeature: (id, updates) =>
-    set((state) => ({
-      features: state.features.map((f) => (f.id === id ? { ...f, ...updates } : f)),
-    })),
-
-  setHighlightedFeature: (id) => {
-    set({ highlightedFeatureId: id })
-    if (id) {
-      setTimeout(() => set({ highlightedFeatureId: null }), 4500)
+  setHighlightedFeature: (slug) => {
+    set({ highlightedFeatureSlug: slug })
+    if (slug) {
+      setTimeout(() => set({ highlightedFeatureSlug: null }), 4500)
     }
   },
 

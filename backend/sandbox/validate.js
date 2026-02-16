@@ -55,10 +55,12 @@ try {
   };
 
   // Try to compile and run in a sandbox
+  // NOTE: Do NOT destructure React hooks here — the generated code does its own destructuring
   const wrappedCode = `
     (function(React, require, exports, UIComponents) {
-      const { useState, useEffect, useMemo, useCallback, useRef, Fragment } = React;
-      const { Card, Badge, Button } = UIComponents;
+      var Card = UIComponents.Card;
+      var Badge = UIComponents.Badge;
+      var Button = UIComponents.Button;
       ${code}
     })
   `;

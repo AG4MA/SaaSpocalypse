@@ -6,3 +6,7 @@ __pycache__/
 venv/
 .vscode/
 *.pyc
+# Sandbox workspace (temp files during testing)
+backend/sandbox_workspace/
+# Generated features are real code — DO track in git
+# features/

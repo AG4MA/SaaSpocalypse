@@ -1,26 +1,37 @@
 import { useFeatureStore } from '../store/featureStore'
 import { connectWebSocket } from './websocket'
-import type { Feature } from '../types'
+import type { InstalledFeature } from '../types'
 
 const API_BASE = '/api'
 
-export async function fetchFeatures(): Promise<Feature[]> {
+/**
+ * Fetch all installed features from the gateway (filesystem-based).
+ */
+export async function fetchFeatures(): Promise<InstalledFeature[]> {
   const res = await fetch(`${API_BASE}/features`)
   if (!res.ok) throw new Error('Failed to fetch features')
   return res.json()
 }
 
-export async function fetchFeatureCode(id: string): Promise<string> {
-  const res = await fetch(`${API_BASE}/features/${id}/code`)
+/**
+ * Fetch component source code for a feature by slug.
+ * Code is loaded on demand, not stored in the frontend store.
+ */
+export async function fetchFeatureCode(slug: string): Promise<string> {
+  const res = await fetch(`${API_BASE}/features/${slug}/code`)
   if (!res.ok) throw new Error('Failed to fetch feature code')
   const data = await res.json()
   return data.code
 }
 
+/**
+ * Start building a new AI feature.
+ * Creates a generation job, connects via WebSocket for progress,
+ * and resolves when the feature is installed.
+ */
 export async function buildFeature(prompt: string): Promise<void> {
   const store = useFeatureStore.getState()
 
-  // Start the feature creation on the backend
   const res = await fetch(`${API_BASE}/features`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -34,22 +45,21 @@ export async function buildFeature(prompt: string): Promise<void> {
 
   const { id } = await res.json()
 
-  // Connect WebSocket for progress updates
   return new Promise<void>((resolve, reject) => {
     connectWebSocket(id, {
       onStep: (step) => {
         store.setGenerationStep(id, step)
       },
-      onComplete: (feature: Feature) => {
+      onComplete: (feature: InstalledFeature) => {
         store.addFeature(feature)
         store.setGenerationStep(id, 'ready')
 
-        // Auto-close after a brief moment
         setTimeout(() => {
           store.closeBuilder()
-          store.setHighlightedFeature(feature.id)
-          // Navigate will be handled by the component
-          window.dispatchEvent(new CustomEvent('feature-installed', { detail: { featureId: feature.id } }))
+          store.setHighlightedFeature(feature.slug)
+          window.dispatchEvent(
+            new CustomEvent('feature-installed', { detail: { slug: feature.slug, route: feature.route } })
+          )
           resolve()
         }, 1500)
       },

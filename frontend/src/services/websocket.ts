@@ -1,8 +1,8 @@
-import type { Feature, FeatureGenerationStep } from '../types'
+import type { InstalledFeature, FeatureGenerationStep } from '../types'
 
 interface WebSocketCallbacks {
   onStep: (step: FeatureGenerationStep) => void
-  onComplete: (feature: Feature) => void
+  onComplete: (feature: InstalledFeature) => void
   onError: (error: string) => void
 }
 
@@ -19,7 +19,7 @@ export function connectWebSocket(featureId: string, callbacks: WebSocketCallback
           callbacks.onStep(data.step as FeatureGenerationStep)
           break
         case 'complete':
-          callbacks.onComplete(data.feature as Feature)
+          callbacks.onComplete(data.feature as InstalledFeature)
           ws.close()
           break
         case 'error':

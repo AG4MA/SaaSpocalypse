@@ -1,119 +1,171 @@
+"""
+Pipeline Orchestrator — Coordinates the full AI feature generation lifecycle.
+
+Flow:
+1. Analyze request (get context from installed features)
+2. Design (build prompt with plugin contract)
+3. Generate code via Claude API
+4. Test in sandbox (real unit + integration tests)
+5. Auto-fix loop if tests fail (max 5 attempts)
+6. Deploy — write feature to features/ directory as a real plugin
+"""
 import asyncio
+import os
+import sys
+
 from fastapi import WebSocket
 
-import sys
-import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from ai_pipeline.prompt_builder import build_prompt
 from ai_pipeline.code_generator import generate_code, fix_code
-from ai_pipeline.sandbox import validate_code
-from database import insert_feature, update_feature, get_all_features, get_features_count
+from ai_pipeline.sandbox import run_sandbox_tests
+from feature_gateway import (
+    get_all_manifests, build_manifest, build_metadata,
+    deploy_feature, slugify,
+)
+from database import update_feature, get_features_count
 
 MAX_ATTEMPTS = 5
 
 
-async def send_step(ws: WebSocket, step: str):
+async def send_step(ws: WebSocket, step: str, detail: dict = None):
     """Send a progress step update via WebSocket."""
     try:
-        await ws.send_json({"type": "step", "step": step})
+        msg = {"type": "step", "step": step}
+        if detail:
+            msg["detail"] = detail
+        await ws.send_json(msg)
     except Exception:
         pass
 
 
 async def run_pipeline(feature_id: str, user_prompt: str, created_at: str, ws: WebSocket):
-    """Execute the full AI feature generation pipeline.
-
-    Steps:
-    1. Analyze the request
-    2. Design the architecture
-    3. Generate code via LLM
-    4. Test in sandbox
-    5. Auto-fix loop if needed
-    6. Deploy (save to DB)
-    """
+    """Execute the full AI feature generation pipeline."""
     try:
-        # Step 1: Analyzing
+        # ─── Step 1: Analyzing ──────────────────────────────────
         await send_step(ws, "analyzing")
-        await asyncio.sleep(1.5)
+        print(f"[Pipeline] Starting generation for feature {feature_id}: '{user_prompt}'")
 
-        # Get existing feature names for context
-        existing = await get_all_features()
-        existing_names = [f["name"] for f in existing]
+        # Get existing installed features from the gateway (filesystem)
+        existing_manifests = get_all_manifests()
+        print(f"[Pipeline] Context: {len(existing_manifests)} installed features")
 
-        # Step 2: Designing
+        # ─── Step 2: Designing ──────────────────────────────────
         await send_step(ws, "designing")
-        prompt = build_prompt(user_prompt, existing_names)
-        await asyncio.sleep(1)
+        prompt = build_prompt(user_prompt, existing_manifests)
 
-        # Step 3: Generating
+        # ─── Step 3: Generating ─────────────────────────────────
         await send_step(ws, "generating")
+        print(f"[Pipeline] Calling Claude API...")
         result = await generate_code(prompt)
 
         name = result["name"]
         icon = result["icon"]
         description = result["description"]
         code = result["code"]
+        slug = slugify(name)
+        print(f"[Pipeline] Generated: '{name}' (slug: {slug}, {len(code)} chars)")
 
-        # Step 4: Testing
+        # Build manifest for sandbox testing
+        sidebar_order = await get_features_count() + len(existing_manifests)
+        manifest = build_manifest(name, icon, description, user_prompt, sidebar_order)
+
+        # ─── Step 4: Testing + Auto-fix loop ────────────────────
         attempts = 0
+        last_test_results = None
+
         while attempts < MAX_ATTEMPTS:
             attempts += 1
-            await send_step(ws, "testing")
+            await send_step(ws, "testing", {"attempt": attempts})
+            print(f"[Pipeline] Running sandbox tests (attempt {attempts}/{MAX_ATTEMPTS})...")
 
-            validation = await validate_code(code)
+            test_results = await run_sandbox_tests(code, manifest)
+            last_test_results = test_results
 
-            if validation["success"]:
+            ut_passed = len(test_results.get("unitTests", {}).get("passed", []))
+            ut_failed = len(test_results.get("unitTests", {}).get("failed", []))
+            it_passed = len(test_results.get("integrationTests", {}).get("passed", []))
+            it_failed = len(test_results.get("integrationTests", {}).get("failed", []))
+
+            print(f"[Pipeline] Tests: {ut_passed} unit passed, {ut_failed} unit failed, "
+                  f"{it_passed} integration passed, {it_failed} integration failed")
+
+            if test_results["success"]:
+                print(f"[Pipeline] All tests passed!")
                 break
 
-            # Step 4b: Fixing
+            print(f"[Pipeline] Tests failed: {test_results.get('summary', '')}")
+
+            # Auto-fix
             if attempts < MAX_ATTEMPTS:
-                await send_step(ws, "fixing")
-                code = await fix_code(code, validation["error"], user_prompt)
+                await send_step(ws, "fixing", {"attempt": attempts})
+                print(f"[Pipeline] Asking Claude to fix...")
+                code = await fix_code(code, test_results, user_prompt)
             else:
-                # Max attempts reached
+                # Max attempts reached — fail
                 await update_feature(feature_id, {
                     "status": "failed",
                     "attempts": attempts,
                 })
                 await ws.send_json({
                     "type": "error",
-                    "message": "Could not create this feature after multiple attempts. Try rephrasing your request.",
+                    "message": f"Could not create this feature after {MAX_ATTEMPTS} attempts. "
+                               f"Last failure: {test_results.get('summary', 'Unknown')}",
                 })
+                print(f"[Pipeline] FAILED after {MAX_ATTEMPTS} attempts")
                 return
 
-        # Step 5: Deploy
+        # ─── Step 5: Deploy ─────────────────────────────────────
         await send_step(ws, "ready")
-        sidebar_order = await get_features_count()
+        print(f"[Pipeline] Deploying '{name}' to features/{slug}/")
 
+        # Build metadata
+        metadata = build_metadata(feature_id, user_prompt, name, created_at, attempts)
+
+        # Deploy to features/ directory (real files on disk)
+        deploy_feature(slug, manifest, code, metadata, last_test_results)
+
+        # Update DB generation job as complete
         await update_feature(feature_id, {
             "name": name,
             "icon": icon,
             "description": description,
-            "code": code,
             "status": "ready",
             "attempts": attempts,
-            "sidebar_order": sidebar_order,
+            "slug": slug,
         })
 
-        # Send complete message with full feature data
-        feature = {
-            "id": feature_id,
+        print(f"[Pipeline] Deployed '{name}' -> features/{slug}/")
+        print(f"[Pipeline]   - component.jsx ({len(code)} chars)")
+        print(f"[Pipeline]   - manifest.json")
+        print(f"[Pipeline]   - metadata.json")
+        print(f"[Pipeline]   - tests/results.json")
+
+        # Send complete message with manifest data (not code)
+        feature_data = {
+            "slug": slug,
             "name": name,
             "icon": icon,
             "description": description,
-            "userPrompt": user_prompt,
-            "code": code,
-            "status": "ready",
-            "attempts": attempts,
-            "createdAt": created_at,
-            "sidebarOrder": sidebar_order,
+            "route": manifest["route"],
+            "sidebarEntry": manifest["sidebarEntry"],
         }
 
-        await ws.send_json({"type": "complete", "feature": feature})
+        await ws.send_json({
+            "type": "complete",
+            "feature": feature_data,
+            "testResults": last_test_results,
+        })
 
     except Exception as e:
-        await update_feature(feature_id, {"status": "failed"})
+        print(f"[Pipeline] ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+        try:
+            await update_feature(feature_id, {"status": "failed"})
+        except Exception:
+            pass
         try:
             await ws.send_json({"type": "error", "message": str(e)})
         except Exception:

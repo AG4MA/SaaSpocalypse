@@ -1,11 +1,38 @@
+import { useState } from 'react'
 import { Card } from '../components/ui/Card'
 import { Input } from '../components/ui/Input'
 import { Button } from '../components/ui/Button'
 import { Badge } from '../components/ui/Badge'
 import { useFeatureStore } from '../store/featureStore'
+import { ShieldCheck, Loader2, AlertTriangle, CheckCircle2, Info } from 'lucide-react'
+
+interface UxEvaluation {
+  score: number
+  summary: string
+  issues: string[]
+  suggestions: string[]
+}
 
 export function Settings() {
-  const features = useFeatureStore((s) => s.features.filter((f) => f.status === 'ready'))
+  const features = useFeatureStore((s) => s.features)
+  const [uxEval, setUxEval] = useState<UxEvaluation | null>(null)
+  const [uxLoading, setUxLoading] = useState(false)
+
+  const runUxEvaluation = async () => {
+    setUxLoading(true)
+    try {
+      const res = await fetch('/api/ux-evaluation')
+      const data = await res.json()
+      setUxEval(data)
+    } catch {
+      setUxEval({ score: -1, summary: 'Could not connect to backend.', issues: [], suggestions: [] })
+    }
+    setUxLoading(false)
+  }
+
+  const scoreColor = uxEval
+    ? uxEval.score >= 80 ? 'text-success' : uxEval.score >= 50 ? 'text-warning' : 'text-error'
+    : ''
 
   return (
     <div className="space-y-6 max-w-2xl">
@@ -49,7 +76,7 @@ export function Settings() {
           <div className="space-y-2">
             {features.map((f) => (
               <div
-                key={f.id}
+                key={f.slug}
                 className="flex items-center gap-3 p-3 rounded-[var(--radius-card)] bg-surface-hover"
               >
                 <span className="text-xl">{f.icon}</span>
@@ -60,6 +87,67 @@ export function Settings() {
                 <Badge variant="success">Active</Badge>
               </div>
             ))}
+          </div>
+        )}
+      </Card>
+
+      {/* UX Evaluation Agent */}
+      <Card>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <ShieldCheck size={18} className="text-primary" />
+            <h3 className="text-sm font-semibold text-text-secondary">UI/UX Quality Agent</h3>
+          </div>
+          <Button variant="secondary" size="sm" onClick={runUxEvaluation} disabled={uxLoading}>
+            {uxLoading ? (
+              <><Loader2 size={14} className="animate-spin mr-1.5" /> Evaluating...</>
+            ) : (
+              'Run Evaluation'
+            )}
+          </Button>
+        </div>
+
+        {!uxEval ? (
+          <p className="text-sm text-text-secondary text-center py-4">
+            Click "Run Evaluation" to let the AI agent assess the UI/UX quality of your installed features.
+          </p>
+        ) : (
+          <div className="space-y-4">
+            {/* Score */}
+            {uxEval.score >= 0 && (
+              <div className="flex items-center gap-3">
+                <span className={`text-3xl font-bold ${scoreColor}`}>{uxEval.score}</span>
+                <span className="text-sm text-text-secondary">/ 100</span>
+              </div>
+            )}
+
+            {/* Summary */}
+            <p className="text-sm">{uxEval.summary}</p>
+
+            {/* Issues */}
+            {uxEval.issues.length > 0 && (
+              <div className="space-y-1.5">
+                <h4 className="text-xs font-semibold text-text-secondary flex items-center gap-1.5">
+                  <AlertTriangle size={12} className="text-warning" /> Issues
+                </h4>
+                {uxEval.issues.map((issue, i) => (
+                  <p key={i} className="text-xs text-text-secondary pl-5">• {issue}</p>
+                ))}
+              </div>
+            )}
+
+            {/* Suggestions */}
+            {uxEval.suggestions.length > 0 && (
+              <div className="space-y-1.5">
+                <h4 className="text-xs font-semibold text-text-secondary flex items-center gap-1.5">
+                  {uxEval.score >= 80 ? <CheckCircle2 size={12} className="text-success" /> : <Info size={12} className="text-primary" />}
+                  Suggestions
+                </h4>
+                {uxEval.suggestions.map((s, i) => (
+                  <p key={i} className="text-xs text-text-secondary pl-5">• {s}</p>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </Card>

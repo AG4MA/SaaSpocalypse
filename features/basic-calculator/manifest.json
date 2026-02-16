@@ -1,0 +1,16 @@
+{
+  "name": "Basic Calculator",
+  "slug": "basic-calculator",
+  "icon": "🧮",
+  "description": "A simple calculator for performing basic mathematical operations within the CRM.",
+  "version": "1.0.0",
+  "route": "/feature/basic-calculator",
+  "sidebarEntry": {
+    "label": "Basic Calculator",
+    "icon": "🧮",
+    "order": 3
+  },
+  "component": "component.jsx",
+  "apiEndpoints": [],
+  "dataAccess": []
+}

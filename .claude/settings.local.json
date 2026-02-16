@@ -10,7 +10,11 @@
       "Bash(pip install:*)",
       "Bash(./venv/Scripts/pip install:*)",
       "Bash(./venv/Scripts/python:*)",
-      "Bash(timeout 10 npx vite:*)"
+      "Bash(timeout 10 npx vite:*)",
+      "Bash(npx vite:*)",
+      "Bash(curl:*)",
+      "Bash(PYTHONIOENCODING=utf-8 ./venv/Scripts/python:*)",
+      "Bash(node /c/projects/personal/SaaSpocalypse/backend/sandbox/validate.js:*)"
     ]
   }
 }

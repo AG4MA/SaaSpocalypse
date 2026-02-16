@@ -1,0 +1,25 @@
+{
+  "success": true,
+  "unitTests": {
+    "passed": [
+      "No forbidden patterns",
+      "Has exports.default",
+      "Code executes without errors",
+      "Export is a function (React component)",
+      "Component renders without crash"
+    ],
+    "failed": []
+  },
+  "integrationTests": {
+    "passed": [
+      "Manifest schema is valid",
+      "Sidebar entry is valid",
+      "No route conflict",
+      "Slug is URL-safe",
+      "Component file reference is valid"
+    ],
+    "failed": []
+  },
+  "errors": [],
+  "summary": "All tests passed: 5 unit, 5 integration"
+}

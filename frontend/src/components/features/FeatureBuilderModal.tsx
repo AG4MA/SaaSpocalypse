@@ -14,17 +14,23 @@ const suggestions = [
 ]
 
 export function FeatureBuilderModal() {
-  const { isBuilderOpen, closeBuilder, currentStep, currentGenerationId } = useFeatureStore()
+  const { isBuilderOpen, closeBuilder, currentStep } = useFeatureStore()
   const [prompt, setPrompt] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const handleSubmit = async () => {
-    if (!prompt.trim()) return
+    if (!prompt.trim() || isGenerating) return
     setIsGenerating(true)
+    setError(null)
+
+    // Show ProgressView immediately
+    useFeatureStore.getState().setGenerationStep('pending', 'analyzing')
+
     try {
       await buildFeature(prompt.trim())
-    } catch {
-      // Error handled in buildFeature via store updates
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong')
     }
     setIsGenerating(false)
     setPrompt('')
@@ -35,18 +41,17 @@ export function FeatureBuilderModal() {
       closeBuilder()
       setPrompt('')
       setIsGenerating(false)
+      setError(null)
     }
   }
 
-  const handleSuggestion = (text: string) => {
-    setPrompt(text)
-  }
-
-  const isShowingProgress = isGenerating && currentStep && currentGenerationId
+  const showProgress = isGenerating || (currentStep && currentStep !== 'ready' && currentStep !== 'failed')
 
   return (
     <Modal isOpen={isBuilderOpen} onClose={handleClose} className="max-w-xl">
-      {!isShowingProgress ? (
+      {showProgress && currentStep ? (
+        <ProgressView currentStep={currentStep} />
+      ) : (
         <div className="p-6 space-y-6">
           {/* Header */}
           <div className="text-center space-y-2">
@@ -58,6 +63,13 @@ export function FeatureBuilderModal() {
               Describe what you want and AI will build it for you.
             </p>
           </div>
+
+          {/* Error */}
+          {error && (
+            <div className="p-3 rounded-[var(--radius-card)] bg-error/10 border border-error/20 text-error text-sm">
+              {error}
+            </div>
+          )}
 
           {/* Textarea */}
           <textarea
@@ -80,7 +92,7 @@ export function FeatureBuilderModal() {
               {suggestions.map((s) => (
                 <button
                   key={s}
-                  onClick={() => handleSuggestion(s)}
+                  onClick={() => setPrompt(s)}
                   className="px-3 py-1.5 text-xs bg-surface-hover hover:bg-primary/10 hover:text-primary border border-border rounded-full text-text-secondary transition-colors"
                 >
                   {s}
@@ -90,12 +102,10 @@ export function FeatureBuilderModal() {
           </div>
 
           {/* Submit */}
-          <Button onClick={handleSubmit} disabled={!prompt.trim()} className="w-full" size="lg">
+          <Button onClick={handleSubmit} disabled={!prompt.trim() || isGenerating} className="w-full" size="lg">
             Create
           </Button>
         </div>
-      ) : (
-        <ProgressView currentStep={currentStep} />
       )}
     </Modal>
   )

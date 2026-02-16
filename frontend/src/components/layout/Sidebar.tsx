@@ -10,8 +10,7 @@ const navItems = [
 ]
 
 export function Sidebar() {
-  const { features, highlightedFeatureId, openBuilder } = useFeatureStore()
-  const readyFeatures = features.filter((f) => f.status === 'ready')
+  const { features, highlightedFeatureSlug, openBuilder } = useFeatureStore()
 
   return (
     <aside className="w-60 h-screen bg-surface border-r border-border flex flex-col fixed left-0 top-0">
@@ -41,21 +40,21 @@ export function Sidebar() {
           </NavLink>
         ))}
 
-        {/* AI Features Section */}
-        {readyFeatures.length > 0 && (
+        {/* AI Features Section — driven by manifest data from the gateway */}
+        {features.length > 0 && (
           <>
             <div className="pt-4 pb-2 px-3">
               <span className="text-xs font-semibold text-text-secondary uppercase tracking-wider">
                 AI Features
               </span>
             </div>
-            {readyFeatures.map((feature) => (
+            {features.map((feature) => (
               <NavLink
-                key={feature.id}
-                to={`/feature/${feature.id}`}
+                key={feature.slug}
+                to={feature.route}
                 className={({ isActive }) =>
                   `sidebar-item ${isActive ? 'active' : ''} ${
-                    highlightedFeatureId === feature.id ? 'feature-highlight' : ''
+                    highlightedFeatureSlug === feature.slug ? 'feature-highlight' : ''
                   }`
                 }
               >

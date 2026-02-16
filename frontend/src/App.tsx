@@ -13,7 +13,7 @@ function AppRoutes() {
   const navigate = useNavigate()
   const loadFeatures = useFeatureStore((s) => s.loadFeatures)
 
-  // Load existing features on mount
+  // Load installed features from gateway on mount
   useEffect(() => {
     fetchFeatures()
       .then(loadFeatures)
@@ -26,8 +26,8 @@ function AppRoutes() {
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail
-      if (detail?.featureId) {
-        navigate(`/feature/${detail.featureId}`)
+      if (detail?.route) {
+        navigate(detail.route)
       }
     }
     window.addEventListener('feature-installed', handler)
@@ -41,7 +41,8 @@ function AppRoutes() {
         <Route path="/contacts" element={<Contacts />} />
         <Route path="/pipeline" element={<Pipeline />} />
         <Route path="/settings" element={<Settings />} />
-        <Route path="/feature/:featureId" element={<DynamicFeature />} />
+        {/* Dynamic route for all AI-generated features */}
+        <Route path="/feature/:featureSlug" element={<DynamicFeature />} />
       </Route>
     </Routes>
   )
